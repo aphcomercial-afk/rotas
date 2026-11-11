@@ -75,18 +75,20 @@ ol.stops{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;g
 .num{width:32px;height:32px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font:700 15px/32px var(--f-display);text-align:center}
 .stop.next .num{background:var(--accent);color:var(--accent-ink)}
 .addr{font-weight:600;overflow-wrap:anywhere}
+.found{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
 .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .tag{font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;background:var(--accent-soft);color:var(--accent)}
 .tag.warn{background:var(--warn-bg);color:var(--warn)}
 .acts{grid-column:2;display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .acts>*{flex:1 1 90px}
 .acts .btn,.acts button{min-height:44px;font-size:14px}
+.fix{grid-column:2;display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.fix input{flex:1 1 220px}
 .bad{background:var(--bad-bg);border:1px solid var(--bad);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
 .bad h3{margin:0;font:700 16px/1.3 var(--f-display);color:var(--bad)}
-.bad .fix{display:flex;gap:8px;flex-wrap:wrap}
-.bad .fix input{flex:1 1 220px}
+.bad .fix{grid-column:auto;margin:0}
 .chunks{display:flex;flex-direction:column;gap:8px}
-.chunks h3,.sub{font:700 16px/1.3 var(--f-display);margin:0}
+.chunks h3{font:700 16px/1.3 var(--f-display);margin:0}
 footer{color:var(--muted);font-size:13px}
 @media (prefers-reduced-motion:no-preference){progress{transition:all .2s}}
 </style>
@@ -100,15 +102,16 @@ footer{color:var(--muted);font-size:13px}
 
   <form class="panel" id="form" autocomplete="off">
     <label for="addrs">Endereços, um por linha
-      <textarea id="addrs" placeholder="Rua das Acácias, 120 - Centro&#10;Av. Brasil, 2500&#10;Rua Sete de Setembro, 45, Bairro Novo"></textarea>
+      <textarea id="addrs" placeholder="13010-000, 120&#10;13015-904, 45 apto 3&#10;Rua das Acácias, 120 - Centro"></textarea>
+      <small>Com o CEP o app acerta a rua. Escreva o CEP e o número, como em 13010-000, 120. Sem CEP, escreva rua, número e bairro.</small>
     </label>
     <div class="row">
       <label for="city">Cidade e estado
         <input type="text" id="city" placeholder="Ex.: Campinas, SP">
-        <small>Entra no fim dos endereços que não tiverem a cidade.</small>
+        <small>Mantém a busca dentro da cidade. Preencha sempre que possível.</small>
       </label>
       <label for="start">Ponto de partida
-        <input type="text" id="start" placeholder="Endereço de saída (opcional)">
+        <input type="text" id="start" placeholder="CEP ou endereço de saída (opcional)">
         <small>Sem partida, a rota começa pela 1ª linha da lista.</small>
       </label>
     </div>
@@ -132,7 +135,7 @@ footer{color:var(--muted);font-size:13px}
   </section>
 
   <footer>
-    Endereços localizados com OpenStreetMap. Onde aparecer "aproximado", o ponto está só na rua, sem o número: confira antes de entregar. A distância é uma estimativa em linha reta com ajuste para ruas.
+    Os CEPs são consultados no ViaCEP e os pontos no mapa vêm do OpenStreetMap. Veja a linha "Localizado" em cada parada para conferir o endereço encontrado. Avisos em amarelo pedem uma olhada antes de entregar. A distância é uma estimativa em linha reta com ajuste para ruas.
   </footer>
 </div>
 
@@ -200,60 +203,217 @@ footer{color:var(--muted);font-size:13px}
     pts.forEach(function(p){ if(prev) km+=hav(prev,p); prev=p; });
     return km*1.3;
   }
+  function median(a){
+    var b=a.slice().sort(function(x,y){return x-y;}), m=b.length>>1;
+    return b.length%2?b[m]:(b[m-1]+b[m])/2;
+  }
+  // Marca (s.far) as paradas muito distantes das outras: costuma ser endereço achado na cidade errada.
+  function flagFar(list){
+    list.forEach(function(s){ s.far=false; });
+    if(list.length<4) return;
+    var c={lat:median(list.map(function(s){return s.lat;})),lng:median(list.map(function(s){return s.lng;}))};
+    var ds=list.map(function(s){return hav(c,s);});
+    var thr=Math.max(20,median(ds)*4);
+    list.forEach(function(s,i){ s.far=ds[i]>thr; });
+  }
   // </opt>
+
+  // <parse>
+  function norm(t){ return (t||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim(); }
+  function withCity(a,city){
+    city=(city||"").trim(); if(!city) return a;
+    var key=norm(city.split(",")[0]);
+    return norm(a).indexOf(key)>=0 ? a : a+", "+city;
+  }
+  function stripNumber(a){
+    return a.replace(/,\s*(n[º°o.]?\s*)?\d+[a-z]?\b[^,]*/i,"");
+  }
+  // Lê uma linha: acha o CEP (com ou sem hífen) e o número da casa.
+  function parseLine(raw){
+    var m=raw.match(/\b(\d{5})-?(\d{3})\b/);
+    if(!m) return {cep:null,rest:raw.trim(),num:null};
+    var rest=raw.replace(m[0]," ").replace(/\s{2,}/g," ").trim();
+    var n=rest.match(/(?:,|\bn[º°o.]?\.?)\s*(\d{1,5})\b/i);
+    var num=n?n[1]:null;
+    if(!num){ var all=rest.match(/\b\d{1,5}\b/g); if(all) num=all[all.length-1]; }
+    return {cep:m[1]+m[2],rest:rest,num:num};
+  }
+  // </parse>
 
   var state = LS.get("rc:state", null) || {stops:[], order:[], start:null, km:0};
   var gpsStart = null;
   var running = false;
+  var editing = new Set();
   var nextId = (state.stops.reduce(function(m,s){return Math.max(m,s.id);},0))+1;
 
   function persist(){ LS.set("rc:state", state); }
   function byId(id){ return state.stops.filter(function(s){return s.id===id;})[0]; }
   function located(s){ return s.status==="ok" || s.status==="approx"; }
 
-  /* ---------- Localização de endereços (Nominatim / OpenStreetMap) ---------- */
+  // <geo>
+  /* ---------- Rede: Nominatim (OpenStreetMap) e serviços de CEP ---------- */
   var lastCall=0;
   function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
-  function nominatim(q){
-    var cache=LS.get("rc:geo",{});
-    if(cache[q]!==undefined) return Promise.resolve(cache[q]);
-    var wait=Math.max(0,1100-(Date.now()-lastCall));
-    return sleep(wait).then(function(){
+  function nomUrl(p){
+    var u="https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&accept-language=pt-BR&countrycodes=br";
+    Object.keys(p).forEach(function(k){ if(p[k]!=null&&p[k]!=="") u+="&"+k+"="+encodeURIComponent(p[k]); });
+    return u;
+  }
+  function nominatim(url){
+    var cache=LS.get("rc:geo2",{});
+    if(cache[url]!==undefined) return Promise.resolve(cache[url]);
+    return sleep(Math.max(0,1100-(Date.now()-lastCall))).then(function(){
       lastCall=Date.now();
-      var url="https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&accept-language=pt-BR&q="+encodeURIComponent(q);
       return fetch(url,{headers:{"Accept":"application/json"}});
     }).then(function(r){
       if(!r.ok) throw new Error("http "+r.status);
       return r.json();
     }).then(function(j){
-      var res=j[0]?{lat:parseFloat(j[0].lat),lng:parseFloat(j[0].lon)}:null;
-      var c=LS.get("rc:geo",{}); c[q]=res; LS.set("rc:geo",c);
+      var o=j&&j[0], res=null;
+      if(o) res={lat:parseFloat(o.lat),lng:parseFloat(o.lon),house:!!(o.address&&o.address.house_number),name:o.display_name||"",bbox:o.boundingbox||null};
+      var c=LS.get("rc:geo2",{}); c[url]=res; LS.set("rc:geo2",c);
       return res;
     });
   }
-  function withCity(a,city){
-    city=(city||"").trim(); if(!city) return a;
-    var key=city.split(",")[0].trim().toLowerCase();
-    return a.toLowerCase().indexOf(key)>=0 ? a : a+", "+city;
+  function jget(url){
+    var cache=LS.get("rc:cep2",{});
+    if(cache[url]!==undefined) return Promise.resolve(cache[url]);
+    return fetch(url,{headers:{"Accept":"application/json"}}).then(function(r){
+      if(r.status===404||r.status===400) return null;
+      if(!r.ok) throw new Error("http "+r.status);
+      return r.json();
+    }).then(function(j){
+      var c=LS.get("rc:cep2",{}); c[url]=j; LS.set("rc:cep2",c);
+      return j;
+    });
   }
-  function stripNumber(a){
-    return a.replace(/,\s*(n[º°o.]?\s*)?\d+[a-z]?\b[^,]*/i,"");
-  }
-  // Devolve {lat,lng,status} ou {status:"fail", err:bool}
-  function geocode(raw, city){
-    var q1=withCity(raw,city);
-    return nominatim(q1).then(function(r){
-      if(r) return {lat:r.lat,lng:r.lng,status:"ok"};
-      var q2=withCity(stripNumber(raw),city);
-      if(q2===q1) return {status:"fail",err:false};
-      return nominatim(q2).then(function(r2){
-        return r2?{lat:r2.lat,lng:r2.lng,status:"approx"}:{status:"fail",err:false};
+  // CEP -> rua, bairro, cidade, UF (ViaCEP; BrasilAPI como reserva)
+  function lookupCep(cep){
+    var netFail=0;
+    return jget("https://viacep.com.br/ws/"+cep+"/json/").then(function(j){
+      if(j && !j.erro) return {street:j.logradouro||"",district:j.bairro||"",city:j.localidade||"",uf:j.uf||""};
+      return null;
+    }).catch(function(){ netFail++; return null; }).then(function(info){
+      if(info) return info;
+      return jget("https://brasilapi.com.br/api/cep/v2/"+cep).then(function(j){
+        if(!j) return null;
+        return {street:j.street||"",district:j.neighborhood||"",city:j.city||"",uf:j.state||""};
+      }).catch(function(){ netFail++; return null; }).then(function(i2){
+        if(!i2 && netFail>=2) throw new Error("sem conexão com os serviços de CEP");
+        return i2;
       });
-    }).catch(function(){ return {status:"fail",err:true}; });
+    });
+  }
+  // CEP -> coordenadas (reserva, quando o mapa não acha a rua)
+  function cepCoords(cep){
+    return jget("https://brasilapi.com.br/api/cep/v2/"+cep).then(function(j){
+      var c=j&&j.location&&j.location.coordinates;
+      if(c&&c.latitude&&c.longitude) return {lat:parseFloat(c.latitude),lng:parseFloat(c.longitude)};
+      return null;
+    }).catch(function(){ return null; }).then(function(r){
+      if(r) return r;
+      return jget("https://cep.awesomeapi.com.br/json/"+cep).then(function(j){
+        if(j&&j.lat&&j.lng) return {lat:parseFloat(j.lat),lng:parseFloat(j.lng)};
+        return null;
+      }).catch(function(){ return null; });
+    });
+  }
+  // Retângulo da cidade (para não achar a mesma rua em outra cidade)
+  var boxMemo={};
+  function cityBox(city){
+    city=(city||"").trim();
+    if(!city) return Promise.resolve(null);
+    if(boxMemo[city]!==undefined) return Promise.resolve(boxMemo[city]);
+    return nominatim(nomUrl({q:city})).then(function(r){
+      var b=null;
+      if(r&&r.bbox&&r.bbox.length===4){
+        var s=parseFloat(r.bbox[0])-0.03, n=parseFloat(r.bbox[1])+0.03, w=parseFloat(r.bbox[2])-0.03, e=parseFloat(r.bbox[3])+0.03;
+        b=[w,n,e,s].map(function(x){ return x.toFixed(4); }).join(",");
+      }
+      boxMemo[city]=b;
+      return b;
+    });
+  }
+  function shortName(n){ return (n||"").split(",").slice(0,4).join(",").trim(); }
+
+  /* ---------- Endereço com CEP ---------- */
+  function geoCep(p,city){
+    return lookupCep(p.cep).then(function(info){
+      var found=info?[info.street,p.num?("nº "+p.num):"",info.district,info.city+(info.uf?"/"+info.uf:"")].filter(Boolean).join(", "):"";
+      var town=info?info.city:"";
+      function ok(r,status,note){ return {lat:r.lat,lng:r.lng,status:status,note:note||"",found:found||shortName(r.name),town:town}; }
+      function fallback(){
+        return cepCoords(p.cep).then(function(c){
+          if(c) return ok(c,"approx","pelo CEP");
+          if(!info) return {status:"fail",err:false};
+          var q=[info.district,info.city||city,info.uf].filter(Boolean).join(", ");
+          if(!q) return {status:"fail",err:false};
+          return nominatim(nomUrl({q:q})).then(function(r){
+            return r?ok(r,"approx","só o bairro ou a cidade"):{status:"fail",err:false};
+          });
+        });
+      }
+      if(info && info.street){
+        var withNum=p.num?nominatim(nomUrl({street:p.num+" "+info.street,city:info.city,state:info.uf})):Promise.resolve(null);
+        return withNum.then(function(r){
+          if(r&&r.house) return ok(r,"ok");
+          return nominatim(nomUrl({street:info.street,city:info.city,state:info.uf})).then(function(r2){
+            var rr=r||r2;
+            if(rr) return ok(rr,"approx",p.num?"na rua, sem o número":"na rua");
+            return fallback();
+          });
+        });
+      }
+      return fallback();
+    });
+  }
+
+  /* ---------- Endereço sem CEP ---------- */
+  function geoText(raw,city,box){
+    var hasNum=/\d/.test(raw);
+    function done(r){
+      var d={lat:r.lat,lng:r.lng,found:shortName(r.name),note:""};
+      if(r.house) d.status="ok"; else { d.status="approx"; d.note=hasNum?"na rua, sem o número":"sem número"; }
+      return d;
+    }
+    var first=box?nominatim(nomUrl({q:raw,viewbox:box,bounded:1})):Promise.resolve(null);
+    return first.then(function(r){
+      if(r) return done(r);
+      var q1=withCity(raw,city);
+      return nominatim(nomUrl({q:q1})).then(function(r2){
+        if(r2){
+          var d=done(r2);
+          if(box){ d.status="approx"; d.note="fora do limite da cidade, confira"; }
+          return d;
+        }
+        var q2=withCity(stripNumber(raw),city);
+        if(q2===q1) return {status:"fail",err:false};
+        return nominatim(nomUrl({q:q2})).then(function(r3){
+          if(!r3) return {status:"fail",err:false};
+          var d3=done(r3); d3.status="approx"; d3.note="na rua, sem o número";
+          return d3;
+        });
+      });
+    });
+  }
+
+  // Devolve {lat,lng,status,note,found,town} ou {status:"fail",err}
+  function geocode(raw,city,box){
+    var p=parseLine(raw);
+    var job=p.cep?geoCep(p,city):geoText(raw,city,box);
+    return job.catch(function(){ return {status:"fail",err:true}; });
+  }
+  // </geo>
+
+  function applyGeo(s,g,city){
+    s.status=g.status; s.err=!!g.err; s.note=g.note||""; s.found=g.found||""; s.extra="";
+    if(g.lat!=null){ s.lat=g.lat; s.lng=g.lng; }
+    if(g.town && city && norm(g.town)!==norm(city.split(",")[0])) s.extra="CEP de "+g.town;
   }
 
   /* ---------- Ordem da rota ---------- */
   function recompute(){
+    flagFar(state.stops.filter(located));
     var doneStops=state.order.map(byId).filter(function(s){return s&&s.done&&located(s);});
     var pending=state.stops.filter(function(s){return located(s)&&!s.done;});
     var startPt=doneStops.length?doneStops[doneStops.length-1]:state.start;
@@ -277,6 +437,22 @@ footer{color:var(--muted);font-size:13px}
   }
 
   /* ---------- Tela ---------- */
+  function editBox(s){
+    var input=el("input",{type:"text",value:s.raw,"aria-label":"Endereço ou CEP para corrigir"});
+    var btn=el("button",{type:"button",text:"Buscar de novo"});
+    btn.addEventListener("click",function(){
+      btn.disabled=true; btn.textContent="Buscando…";
+      s.raw=input.value.trim()||s.raw;
+      var city=$("#city").value;
+      cityBox(city).catch(function(){return null;}).then(function(box){
+        return geocode(s.raw,city,box);
+      }).then(function(g){
+        applyGeo(s,g,city); editing.delete(s.id); recompute(); render();
+      });
+    });
+    return el("div",{class:"fix"},input,btn);
+  }
+
   function render(){
     var res=$("#result");
     if(!state.stops.length){ res.hidden=true; return; }
@@ -289,7 +465,6 @@ footer{color:var(--muted);font-size:13px}
     $("#sumTitle").textContent=ordered.length+(ordered.length===1?" parada":" paradas");
     $("#sumMeta").textContent="≈ "+state.km.toFixed(1).replace(".",",")+" km · "+doneN+" feita"+(doneN===1?"":"s");
 
-    // Trechos para abrir a rota completa no Google Maps (até 10 paradas por vez)
     var ch=$("#chunks"); ch.replaceChildren();
     if(ordered.length>1){
       ch.append(el("h3",{text:"Rota completa no Google Maps"}));
@@ -310,9 +485,12 @@ footer{color:var(--muted);font-size:13px}
         el("div",{class:"num",text:String(idx+1)}),
         el("div",null,
           el("div",{class:"addr",text:s.raw}),
+          s.found?el("div",{class:"found",text:"Localizado: "+s.found}):null,
           el("div",{class:"meta"},
             isNext?el("span",{class:"tag",text:"Próxima"}):null,
-            s.status==="approx"?el("span",{class:"tag warn",text:"aproximado"}):null
+            s.status==="approx"?el("span",{class:"tag warn",text:s.note||"aproximado"}):null,
+            s.far?el("span",{class:"tag warn",text:"longe das outras paradas, confira"}):null,
+            s.extra?el("span",{class:"tag warn",text:s.extra}):null
           )
         ),
         el("div",{class:"acts"},
@@ -320,8 +498,13 @@ footer{color:var(--muted);font-size:13px}
           el("a",{class:"btn",href:wazeStop(s),target:"_blank",rel:"noopener",text:"Waze"}),
           el("button",{type:"button",text:s.done?"Desfazer":"Feito",onclick:function(){
             s.done=!s.done; recompute(); render();
+          }}),
+          el("button",{type:"button",class:"ghost",text:"Corrigir",onclick:function(){
+            if(editing.has(s.id)) editing.delete(s.id); else editing.add(s.id);
+            render();
           }})
-        )
+        ),
+        editing.has(s.id)?editBox(s):null
       );
       list.append(li);
     });
@@ -330,22 +513,9 @@ footer{color:var(--muted);font-size:13px}
     if(bad.length){
       var box=el("div",{class:"bad"},
         el("h3",{text:bad.length===1?"1 endereço não foi encontrado":bad.length+" endereços não foram encontrados"}),
-        el("p",{class:"hint",text:bad.some(function(s){return s.err;})?"Alguns falharam por falta de conexão. Tente de novo.":"Corrija o texto (rua, número, bairro) e tente de novo."})
+        el("p",{class:"hint",text:bad.some(function(s){return s.err;})?"Alguns falharam por falta de conexão. Tente de novo.":"Confira o CEP e o número, ou escreva rua, número e bairro."})
       );
-      bad.forEach(function(s){
-        var input=el("input",{type:"text",value:s.raw,"aria-label":"Endereço para corrigir"});
-        var btn=el("button",{type:"button",text:"Tentar de novo"});
-        btn.addEventListener("click",function(){
-          btn.disabled=true; btn.textContent="Buscando…";
-          s.raw=input.value.trim()||s.raw;
-          geocode(s.raw,$("#city").value).then(function(g){
-            s.status=g.status; s.err=!!g.err;
-            if(g.lat!=null){ s.lat=g.lat; s.lng=g.lng; }
-            recompute(); render();
-          });
-        });
-        box.append(el("div",{class:"fix"},input,btn));
-      });
+      bad.forEach(function(s){ box.append(editBox(s)); });
       b.append(box);
     }
   }
@@ -368,34 +538,38 @@ footer{color:var(--muted);font-size:13px}
     running=true; $("#go").disabled=true;
 
     var stops=lines.map(function(l){ return {id:nextId++,raw:l,status:"pending",done:false}; });
-    var total=stops.length+(startText&&!gpsStart?1:0);
+    var useStartText=!!startText && !gpsStart;
+    var total=stops.length+(useStartText?1:0);
     var count=0;
-    var startPromise;
-    if(gpsStart){ startPromise=Promise.resolve(gpsStart); }
-    else if(startText){
-      setProgress(0,total,"Localizando o ponto de partida…");
-      startPromise=geocode(startText,city).then(function(g){
-        count++;
-        return g.lat!=null?{lat:g.lat,lng:g.lng,raw:startText}:null;
-      });
-    } else { startPromise=Promise.resolve(null); }
 
-    startPromise.then(function(start){
-      state.start=start;
-      var chain=Promise.resolve();
-      stops.forEach(function(s,i){
-        chain=chain.then(function(){
-          setProgress(count,total,"Localizando "+(i+1)+" de "+stops.length+"…");
-          return geocode(s.raw,city).then(function(g){
-            s.status=g.status; s.err=!!g.err;
-            if(g.lat!=null){ s.lat=g.lat; s.lng=g.lng; }
-            count++;
+    setProgress(0,total,"Preparando a busca…");
+    cityBox(city).catch(function(){ return null; }).then(function(box){
+      var startPromise;
+      if(gpsStart){ startPromise=Promise.resolve(gpsStart); }
+      else if(useStartText){
+        setProgress(0,total,"Localizando o ponto de partida…");
+        startPromise=geocode(startText,city,box).then(function(g){
+          count++;
+          return g.lat!=null?{lat:g.lat,lng:g.lng,raw:startText}:null;
+        });
+      } else { startPromise=Promise.resolve(null); }
+
+      return startPromise.then(function(start){
+        state.start=start;
+        var chain=Promise.resolve();
+        stops.forEach(function(s,i){
+          chain=chain.then(function(){
+            setProgress(count,total,"Localizando "+(i+1)+" de "+stops.length+"…");
+            return geocode(s.raw,city,box).then(function(g){
+              applyGeo(s,g,city);
+              count++;
+            });
           });
         });
+        return chain;
       });
-      return chain;
     }).then(function(){
-      state.stops=stops; state.order=[];
+      state.stops=stops; state.order=[]; editing.clear();
       recompute(); render();
       $("#prog").hidden=true;
       $("#result").scrollIntoView({behavior:"smooth",block:"start"});
@@ -422,7 +596,7 @@ footer{color:var(--muted);font-size:13px}
 
   $("#reset").addEventListener("click",function(){
     state={stops:[],order:[],start:null,km:0}; persist();
-    $("#addrs").value=""; $("#start").value=""; gpsStart=null;
+    $("#addrs").value=""; $("#start").value=""; gpsStart=null; editing.clear();
     render(); window.scrollTo({top:0,behavior:"smooth"});
   });
 
