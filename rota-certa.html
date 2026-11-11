@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rota Certa">
+<meta name="theme-color" content="#0A7B63">
+<title>Rota Certa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: coluna única de celular. Formulário no topo, resultado logo abaixo, paradas como lista de cartões com ações grandes para o polegar. */
+:root{
+  --bg:#F2F5F3; --surface:#FFFFFF; --ink:#13201B; --muted:#5A6B64; --line:#D5DEDA;
+  --accent:#0A7B63; --accent-ink:#FFFFFF; --accent-soft:#E2F3ED;
+  --warn:#8A5200; --warn-bg:#FFF0D0; --bad:#B3261E; --bad-bg:#FDE7E5;
+  --f-display:"Space Grotesk","Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0E1512; --surface:#16201B; --ink:#E7EFEB; --muted:#9BADA5; --line:#27342E;
+    --accent:#3FD1A6; --accent-ink:#06231B; --accent-soft:#12352B;
+    --warn:#F2B35A; --warn-bg:#3A2B10; --bad:#FF8A80; --bad-bg:#3B1714;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:16px/1.5 var(--f-body);
+  padding-block:max(20px,env(safe-area-inset-top,0px)) max(40px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header h1{font:700 28px/1.1 var(--f-display);margin:0;letter-spacing:-.01em}
+header p{margin:6px 0 0;color:var(--muted);font-size:15px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px}
+label{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:14px}
+label small{font-weight:400;color:var(--muted);font-size:13px}
+textarea,input[type=text]{
+  width:100%;font:inherit;font-weight:400;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0;
+}
+textarea{min-height:190px;resize:vertical;line-height:1.45}
+textarea::placeholder,input::placeholder{color:var(--muted);opacity:.8}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 200px;min-width:0}
+button,.btn{
+  font:600 15px/1 var(--f-body);min-height:46px;padding:0 16px;border-radius:10px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;
+}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-size:16px;min-height:52px}
+button:disabled{opacity:.55;cursor:default}
+button.ghost{background:transparent}
+.hint{margin:0;color:var(--muted);font-size:13px}
+progress{width:100%;height:8px;accent-color:var(--accent)}
+.status{font-size:14px;color:var(--muted)}
+.summary{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;justify-content:space-between}
+.summary h2{font:700 20px/1.2 var(--f-display);margin:0}
+.summary span{color:var(--muted);font-size:14px}
+ol.stops{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.stop{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;grid-template-columns:32px minmax(0,1fr);gap:4px 12px}
+.stop.next{border:2px solid var(--accent);padding:13px}
+.stop.done{opacity:.6}
+.stop.done .addr{text-decoration:line-through}
+.num{width:32px;height:32px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font:700 15px/32px var(--f-display);text-align:center}
+.stop.next .num{background:var(--accent);color:var(--accent-ink)}
+.addr{font-weight:600;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.tag{font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;background:var(--accent-soft);color:var(--accent)}
+.tag.warn{background:var(--warn-bg);color:var(--warn)}
+.acts{grid-column:2;display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.acts>*{flex:1 1 90px}
+.acts .btn,.acts button{min-height:44px;font-size:14px}
+.bad{background:var(--bad-bg);border:1px solid var(--bad);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.bad h3{margin:0;font:700 16px/1.3 var(--f-display);color:var(--bad)}
+.bad .fix{display:flex;gap:8px;flex-wrap:wrap}
+.bad .fix input{flex:1 1 220px}
+.chunks{display:flex;flex-direction:column;gap:8px}
+.chunks h3,.sub{font:700 16px/1.3 var(--f-display);margin:0}
+footer{color:var(--muted);font-size:13px}
+@media (prefers-reduced-motion:no-preference){progress{transition:all .2s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Rota Certa</h1>
+    <p>Cole os endereços e veja a melhor ordem de entrega.</p>
+  </header>
+
+  <form class="panel" id="form" autocomplete="off">
+    <label for="addrs">Endereços, um por linha
+      <textarea id="addrs" placeholder="Rua das Acácias, 120 - Centro&#10;Av. Brasil, 2500&#10;Rua Sete de Setembro, 45, Bairro Novo"></textarea>
+    </label>
+    <div class="row">
+      <label for="city">Cidade e estado
+        <input type="text" id="city" placeholder="Ex.: Campinas, SP">
+        <small>Entra no fim dos endereços que não tiverem a cidade.</small>
+      </label>
+      <label for="start">Ponto de partida
+        <input type="text" id="start" placeholder="Endereço de saída (opcional)">
+        <small>Sem partida, a rota começa pela 1ª linha da lista.</small>
+      </label>
+    </div>
+    <button type="button" class="ghost" id="gps">Usar minha localização como partida</button>
+    <button type="submit" class="primary" id="go">Calcular rota</button>
+    <div id="prog" hidden>
+      <progress id="bar" value="0" max="1"></progress>
+      <div class="status" id="ptext" role="status" aria-live="polite"></div>
+    </div>
+  </form>
+
+  <section id="result" hidden aria-label="Rota calculada" style="display:flex;flex-direction:column;gap:16px">
+    <div class="summary">
+      <h2 id="sumTitle"></h2>
+      <span id="sumMeta"></span>
+    </div>
+    <div class="chunks" id="chunks"></div>
+    <ol class="stops" id="list"></ol>
+    <div id="bad"></div>
+    <button type="button" class="ghost" id="reset">Limpar e começar outra rota</button>
+  </section>
+
+  <footer>
+    Endereços localizados com OpenStreetMap. Onde aparecer "aproximado", o ponto está só na rua, sem o número: confira antes de entregar. A distância é uma estimativa em linha reta com ajuste para ruas.
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(s){ return document.querySelector(s); };
+  var LS = {
+    get: function(k,d){ try{ var v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } },
+    set: function(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+  };
+  function el(tag, props){
+    var e=document.createElement(tag), kids=Array.prototype.slice.call(arguments,2);
+    if(props) Object.keys(props).forEach(function(k){
+      var v=props[k];
+      if(k==="class") e.className=v;
+      else if(k==="text") e.textContent=v;
+      else if(k.indexOf("on")===0) e.addEventListener(k.slice(2),v);
+      else if(v!==false && v!=null) e.setAttribute(k, v===true?"":v);
+    });
+    kids.forEach(function(kid){
+      if(kid==null||kid===false) return;
+      e.append(kid.nodeType?kid:document.createTextNode(kid));
+    });
+    return e;
+  }
+
+  // <opt>
+  function hav(a,b){
+    var R=6371,t=Math.PI/180,dLat=(b.lat-a.lat)*t,dLng=(b.lng-a.lng)*t;
+    var x=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return 2*R*Math.asin(Math.sqrt(x));
+  }
+  // Ordena as paradas: vizinho mais próximo + melhoria 2-opt. Sem "start", a primeira parada fica fixa.
+  function optimize(start, pts){
+    if(pts.length<=1) return pts.slice();
+    var left=pts.slice(), path=[], cur=start;
+    if(!cur){ cur=left.shift(); path.push(cur); }
+    while(left.length){
+      var bi=0,bd=Infinity;
+      for(var i=0;i<left.length;i++){ var d=hav(cur,left[i]); if(d<bd){bd=d;bi=i;} }
+      cur=left.splice(bi,1)[0]; path.push(cur);
+    }
+    var full=start?[start].concat(path):path.slice();
+    var improved=true, guard=0;
+    while(improved && guard++<60){
+      improved=false;
+      for(var i2=1;i2<full.length-1;i2++){
+        for(var j=i2+1;j<full.length;j++){
+          var a=full[i2-1], b=full[i2], c=full[j], d2=full[j+1];
+          var before=hav(a,b)+(d2?hav(c,d2):0);
+          var after=hav(a,c)+(d2?hav(b,d2):0);
+          if(after<before-1e-9){
+            var seg=full.slice(i2,j+1).reverse();
+            full.splice.apply(full,[i2,j-i2+1].concat(seg));
+            improved=true;
+          }
+        }
+      }
+    }
+    return start?full.slice(1):full;
+  }
+  function pathKm(start, pts){
+    var km=0, prev=start;
+    pts.forEach(function(p){ if(prev) km+=hav(prev,p); prev=p; });
+    return km*1.3;
+  }
+  // </opt>
+
+  var state = LS.get("rc:state", null) || {stops:[], order:[], start:null, km:0};
+  var gpsStart = null;
+  var running = false;
+  var nextId = (state.stops.reduce(function(m,s){return Math.max(m,s.id);},0))+1;
+
+  function persist(){ LS.set("rc:state", state); }
+  function byId(id){ return state.stops.filter(function(s){return s.id===id;})[0]; }
+  function located(s){ return s.status==="ok" || s.status==="approx"; }
+
+  /* ---------- Localização de endereços (Nominatim / OpenStreetMap) ---------- */
+  var lastCall=0;
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+  function nominatim(q){
+    var cache=LS.get("rc:geo",{});
+    if(cache[q]!==undefined) return Promise.resolve(cache[q]);
+    var wait=Math.max(0,1100-(Date.now()-lastCall));
+    return sleep(wait).then(function(){
+      lastCall=Date.now();
+      var url="https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&accept-language=pt-BR&q="+encodeURIComponent(q);
+      return fetch(url,{headers:{"Accept":"application/json"}});
+    }).then(function(r){
+      if(!r.ok) throw new Error("http "+r.status);
+      return r.json();
+    }).then(function(j){
+      var res=j[0]?{lat:parseFloat(j[0].lat),lng:parseFloat(j[0].lon)}:null;
+      var c=LS.get("rc:geo",{}); c[q]=res; LS.set("rc:geo",c);
+      return res;
+    });
+  }
+  function withCity(a,city){
+    city=(city||"").trim(); if(!city) return a;
+    var key=city.split(",")[0].trim().toLowerCase();
+    return a.toLowerCase().indexOf(key)>=0 ? a : a+", "+city;
+  }
+  function stripNumber(a){
+    return a.replace(/,\s*(n[º°o.]?\s*)?\d+[a-z]?\b[^,]*/i,"");
+  }
+  // Devolve {lat,lng,status} ou {status:"fail", err:bool}
+  function geocode(raw, city){
+    var q1=withCity(raw,city);
+    return nominatim(q1).then(function(r){
+      if(r) return {lat:r.lat,lng:r.lng,status:"ok"};
+      var q2=withCity(stripNumber(raw),city);
+      if(q2===q1) return {status:"fail",err:false};
+      return nominatim(q2).then(function(r2){
+        return r2?{lat:r2.lat,lng:r2.lng,status:"approx"}:{status:"fail",err:false};
+      });
+    }).catch(function(){ return {status:"fail",err:true}; });
+  }
+
+  /* ---------- Ordem da rota ---------- */
+  function recompute(){
+    var doneStops=state.order.map(byId).filter(function(s){return s&&s.done&&located(s);});
+    var pending=state.stops.filter(function(s){return located(s)&&!s.done;});
+    var startPt=doneStops.length?doneStops[doneStops.length-1]:state.start;
+    var opt=optimize(startPt,pending);
+    var all=doneStops.concat(opt);
+    state.order=all.map(function(s){return s.id;});
+    state.km=pathKm(state.start,all);
+    persist();
+  }
+
+  /* ---------- Links de navegação ---------- */
+  function gmapsStop(s){ return "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination="+s.lat+","+s.lng; }
+  function wazeStop(s){ return "https://waze.com/ul?navigate=yes&ll="+s.lat+","+s.lng; }
+  function gmapsChunk(list, origin){
+    var dest=list[list.length-1];
+    var wps=list.slice(0,-1).map(function(s){return s.lat+","+s.lng;}).join("|");
+    var u="https://www.google.com/maps/dir/?api=1&travelmode=driving&destination="+dest.lat+","+dest.lng;
+    if(origin) u+="&origin="+origin.lat+","+origin.lng;
+    if(wps) u+="&waypoints="+encodeURIComponent(wps);
+    return u;
+  }
+
+  /* ---------- Tela ---------- */
+  function render(){
+    var res=$("#result");
+    if(!state.stops.length){ res.hidden=true; return; }
+    res.hidden=false;
+    var ordered=state.order.map(byId).filter(Boolean);
+    var bad=state.stops.filter(function(s){return s.status==="fail";});
+    var doneN=ordered.filter(function(s){return s.done;}).length;
+    var next=ordered.filter(function(s){return !s.done;})[0];
+
+    $("#sumTitle").textContent=ordered.length+(ordered.length===1?" parada":" paradas");
+    $("#sumMeta").textContent="≈ "+state.km.toFixed(1).replace(".",",")+" km · "+doneN+" feita"+(doneN===1?"":"s");
+
+    // Trechos para abrir a rota completa no Google Maps (até 10 paradas por vez)
+    var ch=$("#chunks"); ch.replaceChildren();
+    if(ordered.length>1){
+      ch.append(el("h3",{text:"Rota completa no Google Maps"}));
+      var row=el("div",{class:"row"});
+      for(var i=0;i<ordered.length;i+=10){
+        var part=ordered.slice(i,i+10);
+        var origin=i===0?state.start:ordered[i-1];
+        row.append(el("a",{class:"btn",href:gmapsChunk(part,origin),target:"_blank",rel:"noopener",
+          text:"Paradas "+(i+1)+" a "+(i+part.length)}));
+      }
+      ch.append(row);
+    }
+
+    var list=$("#list"); list.replaceChildren();
+    ordered.forEach(function(s,idx){
+      var isNext=next&&next.id===s.id;
+      var li=el("li",{class:"stop"+(isNext?" next":"")+(s.done?" done":"")},
+        el("div",{class:"num",text:String(idx+1)}),
+        el("div",null,
+          el("div",{class:"addr",text:s.raw}),
+          el("div",{class:"meta"},
+            isNext?el("span",{class:"tag",text:"Próxima"}):null,
+            s.status==="approx"?el("span",{class:"tag warn",text:"aproximado"}):null
+          )
+        ),
+        el("div",{class:"acts"},
+          el("a",{class:"btn",href:gmapsStop(s),target:"_blank",rel:"noopener",text:"Google Maps"}),
+          el("a",{class:"btn",href:wazeStop(s),target:"_blank",rel:"noopener",text:"Waze"}),
+          el("button",{type:"button",text:s.done?"Desfazer":"Feito",onclick:function(){
+            s.done=!s.done; recompute(); render();
+          }})
+        )
+      );
+      list.append(li);
+    });
+
+    var b=$("#bad"); b.replaceChildren();
+    if(bad.length){
+      var box=el("div",{class:"bad"},
+        el("h3",{text:bad.length===1?"1 endereço não foi encontrado":bad.length+" endereços não foram encontrados"}),
+        el("p",{class:"hint",text:bad.some(function(s){return s.err;})?"Alguns falharam por falta de conexão. Tente de novo.":"Corrija o texto (rua, número, bairro) e tente de novo."})
+      );
+      bad.forEach(function(s){
+        var input=el("input",{type:"text",value:s.raw,"aria-label":"Endereço para corrigir"});
+        var btn=el("button",{type:"button",text:"Tentar de novo"});
+        btn.addEventListener("click",function(){
+          btn.disabled=true; btn.textContent="Buscando…";
+          s.raw=input.value.trim()||s.raw;
+          geocode(s.raw,$("#city").value).then(function(g){
+            s.status=g.status; s.err=!!g.err;
+            if(g.lat!=null){ s.lat=g.lat; s.lng=g.lng; }
+            recompute(); render();
+          });
+        });
+        box.append(el("div",{class:"fix"},input,btn));
+      });
+      b.append(box);
+    }
+  }
+
+  /* ---------- Ações ---------- */
+  function setProgress(done,total,text){
+    $("#prog").hidden=false;
+    $("#bar").max=total; $("#bar").value=done;
+    $("#ptext").textContent=text;
+  }
+
+  $("#form").addEventListener("submit",function(ev){
+    ev.preventDefault();
+    if(running) return;
+    var lines=$("#addrs").value.split(/\n+/).map(function(l){return l.trim();}).filter(Boolean);
+    if(!lines.length){ $("#addrs").focus(); return; }
+    var city=$("#city").value.trim();
+    LS.set("rc:city",city);
+    var startText=$("#start").value.trim();
+    running=true; $("#go").disabled=true;
+
+    var stops=lines.map(function(l){ return {id:nextId++,raw:l,status:"pending",done:false}; });
+    var total=stops.length+(startText&&!gpsStart?1:0);
+    var count=0;
+    var startPromise;
+    if(gpsStart){ startPromise=Promise.resolve(gpsStart); }
+    else if(startText){
+      setProgress(0,total,"Localizando o ponto de partida…");
+      startPromise=geocode(startText,city).then(function(g){
+        count++;
+        return g.lat!=null?{lat:g.lat,lng:g.lng,raw:startText}:null;
+      });
+    } else { startPromise=Promise.resolve(null); }
+
+    startPromise.then(function(start){
+      state.start=start;
+      var chain=Promise.resolve();
+      stops.forEach(function(s,i){
+        chain=chain.then(function(){
+          setProgress(count,total,"Localizando "+(i+1)+" de "+stops.length+"…");
+          return geocode(s.raw,city).then(function(g){
+            s.status=g.status; s.err=!!g.err;
+            if(g.lat!=null){ s.lat=g.lat; s.lng=g.lng; }
+            count++;
+          });
+        });
+      });
+      return chain;
+    }).then(function(){
+      state.stops=stops; state.order=[];
+      recompute(); render();
+      $("#prog").hidden=true;
+      $("#result").scrollIntoView({behavior:"smooth",block:"start"});
+    }).catch(function(){
+      $("#ptext").textContent="Algo deu errado. Confira a conexão e tente de novo.";
+    }).then(function(){
+      running=false; $("#go").disabled=false;
+    });
+  });
+
+  $("#gps").addEventListener("click",function(){
+    var btn=$("#gps");
+    if(!navigator.geolocation){ btn.textContent="Este aparelho não informa a localização"; return; }
+    btn.disabled=true; btn.textContent="Buscando sua localização…";
+    navigator.geolocation.getCurrentPosition(function(p){
+      gpsStart={lat:p.coords.latitude,lng:p.coords.longitude,raw:"Minha localização"};
+      $("#start").value="Minha localização (GPS)";
+      btn.disabled=false; btn.textContent="Usar minha localização como partida";
+    },function(){
+      btn.disabled=false; btn.textContent="Não foi possível. Toque para tentar de novo";
+    },{enableHighAccuracy:true,timeout:15000,maximumAge:60000});
+  });
+  $("#start").addEventListener("input",function(){ gpsStart=null; });
+
+  $("#reset").addEventListener("click",function(){
+    state={stops:[],order:[],start:null,km:0}; persist();
+    $("#addrs").value=""; $("#start").value=""; gpsStart=null;
+    render(); window.scrollTo({top:0,behavior:"smooth"});
+  });
+
+  // Estado inicial: cidade lembrada e última rota (com as paradas já marcadas como feitas)
+  $("#city").value=LS.get("rc:city","");
+  if(state.stops.length){
+    $("#addrs").value=state.stops.map(function(s){return s.raw;}).join("\n");
+    render();
+  }
+})();
+</script>
+</body>
+</html>
